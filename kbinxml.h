@@ -8,6 +8,8 @@
 #include <QHostAddress>
 #include <QtXml>
 
+//namespace kbin {
+
 class dataType;
 
 class KBINXMLQT_EXPORT KBinXML
@@ -38,17 +40,16 @@ private:
     template <typename T> QList<T> readDataArray(QDataStream &stream);
     QByteArray readDataArray(QDataStream &stream);
 
-    template <class T> QString genDataString(QList<T> list);
-    template <> QString genDataString(QList<float> list);
+    template <typename T> QString genDataString(QList<T> list);
     //QString genDataString(QList<float> list);
 
-    template <class T> void appendData(QDataStream &stream, QList<T> list, int count = 1);
-    template <class T> void appendDataArray(QDataStream &stream, QList<T> data);
+    template <typename T> void appendData(QDataStream &stream, QList<T> list, int count = 1);
+    template <typename T> void appendDataArray(QDataStream &stream, QList<T> data);
     void appendDataArray(QDataStream &stream, QByteArray data);
 
     template <typename T> T stringToVar(QString string, bool *ok);
 
-    template <class T> QList<T> praseDataString(QString string);
+    template <typename T> QList<T> praseDataString(QString string);
 
     void processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream, QTextCodec *outputCodec);
 
@@ -64,5 +65,7 @@ private:
 
 
 };
+template <> QString KBinXML::genDataString(QList<float> list);
+//}
 
 #endif // KBINXML_H

@@ -37,17 +37,18 @@ static QHash<quint8, QString> encodingFlag;
 static QHash<QString, quint8> encodingFlagMap;
 
 enum type {b = 1, s8, u8, s16, u16, s32, u32, s64, u64, f, d, ip4, UNIXtime, binary, str, node_start, attr, node_end, doc_end};
-
+/*
 typedef struct
 {
     QString key;
     QString content;
 } XMLAttrib;
-
+*/
 class dataType
 {
 public:
-    dataType();
+    //dataType();
+    /*
     dataType(int size, int count, type varType, bool isVVar)
     {
         this->size = size;
@@ -55,6 +56,15 @@ public:
         this->varType = varType;
         this->isVVar = isVVar;
     }
+    dataType(dataType &&data)
+    {
+        this->size = data.size;
+        this->count = data.count;
+        this->isVVar = data.isVVar;
+        this->varType = data.varType;
+        this->arraySize = data.arraySize;
+    }
+    */
     int size = UNKNOWN;
     int count = UNKNOWN;
     type varType;
@@ -65,12 +75,14 @@ private:
     char padding[3];        //只是为了过掉警告，没有任何用处
 };
 
+/*
 typedef struct
 {
     dataType type;
     QList<XMLAttrib> attrib;
     QString content;
 } node;
+*/
 
 void init( void )
 {
@@ -806,21 +818,16 @@ dataType KBinXML::typePrase(QString typeString)
     }
     if(typeString.front().isDigit())
     {
-        try{
-            if(typeString.front() >= '2' && typeString.front() <= '4')
-            {
-                QString count;
-                count = typeString.at(0);
-                result.count = count.toInt();
-                typeString = typeString.right(typeString.length() - 1);
-            }
-        }
-        catch(int i)
+        if(typeString.front() >= '2' && typeString.front() <= '4')
         {
-            if(i == -1)
-            {
-                return dataType();
-            }
+            QString count;
+            count = typeString.at(0);
+            result.count = count.toInt();
+            typeString = typeString.right(typeString.length() - 1);
+        }
+        else
+        {
+            return dataType();
         }
     }
 
@@ -977,7 +984,7 @@ QString KBinXML::genDataString(QList<T> list)
     return tmpString;
 }
 
-template <>
+template<>
 QString KBinXML::genDataString<float>(QList<float> list)
 {
     bool firstTimeExec = true;
