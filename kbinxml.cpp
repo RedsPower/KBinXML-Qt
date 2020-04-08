@@ -126,11 +126,11 @@ KBinXML::KBinXML(QByteArray binaryData)
         else if(tempu8 == SIG_UNCOMPRESS)
             isSixBitCoded = false;
         else
-            Q_ASSERT(false);
+            qFatal("compress tag failed");
 
         stream >> tempu8;
         XMLEncoding = encodingFlag[tempu8];
-        Q_ASSERT(!XMLEncoding.isEmpty());
+        Q_ASSERT(not XMLEncoding.isEmpty());
 
         Q_ASSERT((tempu8 & 0xFF) != (static_cast<void>(stream >> tempu8), tempu8));
     }
@@ -201,93 +201,100 @@ KBinXML::KBinXML(QByteArray binaryData)
 
         if(!isArray)
             nodeType.arraySize = INVAILD;
-
-        switch (nodeType.varType)
+        if(nodeType.varType == str)
         {
-        case b:
-        case s8:
-        {
-            WRITEDATATOXML(qint8, isArray);
+            QByteArray bytearray = readDataArray(dataStream);
+            writer.writeCharacters(codec->toUnicode(bytearray));
         }
-        break;
-        case u8:
+        else if(nodeType.varType == binary)
         {
-            WRITEDATATOXML(quint8, isArray);
+            writer.writeCharacters(readDataArray(dataStream).toHex().toUpper());
         }
-        break;
-        case s16:
+        else
         {
-            WRITEDATATOXML(qint16, isArray);
-        }
-        break;
-        case u16:
-        {
-            WRITEDATATOXML(quint16, isArray);
-        }
-        break;
-        case s32:
-        {
-            WRITEDATATOXML(qint32, isArray);
-        }
-        break;
-        case UNIXtime:
-        {
-            Q_ASSERT(nodeType.count == 1);
-        }
-            Q_FALLTHROUGH();
-        case u32:
-        {
-            WRITEDATATOXML(quint32, isArray);
-        }
-        break;
-        case s64:
-        {
-            WRITEDATATOXML(qint64, isArray);
-        }
-        break;
-        case u64:
-        {
-            WRITEDATATOXML(quint64, isArray);
-        }
-        break;
-        case f:
-        {
-            WRITEDATATOXML(float, isArray);
-        }
-        break;
-        case d:
-        {
-            WRITEDATATOXML(double, isArray);
-        }
-        break;
-        case ip4:
-        {
-            Q_ASSERT(nodeType.count == 1);
-
-            QList<quint32> ipList = isArray ? readData<quint32>(dataStream, nodeType.count) : readDataArray<quint32>(dataStream);
-            QStringList stringList;
-            for(quint32 ipv4 : ipList)
+            switch (nodeType.varType)
             {
-                QString tmpString = QHostAddress(ipv4).toString();
-                stringList.append(tmpString);
-
+            case b:
+            case s8:
+            {
+                WRITEDATATOXML(qint8, isArray);
             }
-            QString tmpString = genDataString<QString>(stringList);
-            writer.writeCharacters(tmpString);
-        }
-        break;
-        case binary:
-        case str:
-            isArray = true;
-        break;
-
-        case node_start:
-        case node_end:
-        case attr:
-        case doc_end:
             break;
-        }
+            case u8:
+            {
+                WRITEDATATOXML(quint8, isArray);
+            }
+            break;
+            case s16:
+            {
+                WRITEDATATOXML(qint16, isArray);
+            }
+            break;
+            case u16:
+            {
+                WRITEDATATOXML(quint16, isArray);
+            }
+            break;
+            case s32:
+            {
+                WRITEDATATOXML(qint32, isArray);
+            }
+            break;
+            case UNIXtime:
+            {
+                Q_ASSERT(nodeType.count == 1);
+            }
+                Q_FALLTHROUGH();
+            case u32:
+            {
+                WRITEDATATOXML(quint32, isArray);
+            }
+            break;
+            case s64:
+            {
+                WRITEDATATOXML(qint64, isArray);
+            }
+            break;
+            case u64:
+            {
+                WRITEDATATOXML(quint64, isArray);
+            }
+            break;
+            case f:
+            {
+                WRITEDATATOXML(float, isArray);
+            }
+            break;
+            case d:
+            {
+                WRITEDATATOXML(double, isArray);
+            }
+            break;
+            case ip4:
+            {
+                Q_ASSERT(nodeType.count == 1);
 
+                QList<quint32> ipList = isArray ? readData<quint32>(dataStream, nodeType.count) : readDataArray<quint32>(dataStream);
+                QStringList stringList;
+                for(quint32 ipv4 : ipList)
+                {
+                    QString tmpString = QHostAddress(ipv4).toString();
+                    stringList.append(tmpString);
+
+                }
+                QString tmpString = genDataString<QString>(stringList);
+                writer.writeCharacters(tmpString);
+            }
+            break;
+            case binary:
+            case str:
+            case node_start:
+            case node_end:
+            case attr:
+            case doc_end:
+                break;
+            }
+        }
         if(isArray)
         {
             /*
@@ -383,20 +390,10 @@ KBinXML::KBinXML(QByteArray binaryData)
                 break;
             }
             */
-
-            if(nodeType.varType == str)
-            {
-                QByteArray bytearray = readDataArray(dataStream);
-                writer.writeCharacters(codec->toUnicode(bytearray));
-            }
-            else if(nodeType.varType == binary)
-            {
-                writer.writeCharacters(readDataArray(dataStream).toHex().toUpper());
-            }
-            else
                 writer.writeAttribute("__count", QString("%1")
                                                      .arg(readedDataSize / static_cast<quint32>(nodeType.size * nodeType.count)));
         }
+
 
     }
 
@@ -972,7 +969,7 @@ QString KBinXML::genDataString(QList<T> list)
     QString tmpString;
     for(int i = 0; i < list.size(); ++i)
     {
-        if(!firstTimeExec)
+        if(not firstTimeExec)
             tmpString.append(' ');
         tmpString.append(QString("%1").arg(list.at(i)));
         firstTimeExec = false;
