@@ -20,14 +20,12 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     formatid.cpp \
-    i128.cpp \
     kbinxml.cpp \
     sixbit.cpp
 
 HEADERS += \
     KBinXML-Qt_global.h \
     formatid.h \
-    i128.h \
     kbinxml.h \
     sixbit.h
 

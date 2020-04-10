@@ -7,6 +7,7 @@
 #include <QDataStream>
 #include <QHostAddress>
 #include <QtXml>
+#include "sixbit.h"
 
 //namespace kbin {
 

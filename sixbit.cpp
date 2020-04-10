@@ -1,6 +1,7 @@
 #include "sixbit.h"
 #include <QDataStream>
 #include <QBitArray>
+#include <QDebug>
 
 static const QString charmap("0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz");
 
@@ -19,11 +20,13 @@ QByteArray sixBit::compress(QByteArray data)
         codedData.append(static_cast<char>(charmap.indexOf(data.at(i))));
     }
 
+    bitArray.resize((data.length() * 6));
     for(int i = 0; i < data.length(); ++i)
+    {
         for(int j = 0; j < 6; ++j)
-            bitArray[6 * i + j] = (data[i] >> (6 - j - 1)) & 1;
+            bitArray[6 * i + j] = (static_cast<quint8>(codedData[i]) >> (6 - j - 1)) & 1;
+    }
 
-    bitArray.resize((data.length() * 6) / 8);
     result += static_cast<char>(data.length());
     result += QBitAToQByteA(bitArray);
     return result;
@@ -59,9 +62,9 @@ QByteArray sixBit::decompress(QDataStream &stream)
         char temp = 0;
         for(int j = 0; j < 6; ++j)
         {
-            temp |= (bitArray[6 * i + j] << (6 - j - 1));
+            temp |= ((bitArray[6 * i + j] ? 1 : 0) << (6 - j - 1));
         }
-        result.append(temp);
+        result.append(charmap[temp]);
     }
 
     return result;
@@ -73,6 +76,7 @@ QByteArray sixBit::QBitAToQByteA(QBitArray data)
     int padding = 0;
     if(data.size() % 8 != 0)
         padding = 8 - (data.size() % 8);
+    data.resize(data.size() + padding);
 
     for(int i = 0; i < data.size() / 8; ++i)
     {
@@ -91,7 +95,7 @@ QBitArray sixBit::QByteAToQBitA(QByteArray data)
     QBitArray result(data.length() * 8);
     for(int i = 0; i < data.length(); ++i)
         for(int j = 0; j < 8; ++j)
-            result[8 * i + j] = (data.at(i) >> (8 - j + 1)) & 1;
+            result[8 * i + j] = (data.at(i) >> (8 - j - 1)) & 1;
 
     return result;
 }
