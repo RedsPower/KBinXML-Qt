@@ -682,10 +682,10 @@ bool KBinXML::isKBin(QByteArray data)
     else
         return false;
 
-    if(encodingFlag.keys().contains(static_cast<quint8>(data.at(2))))
+    if(not encodingFlag.keys().contains(static_cast<quint8>(data.at(2))))
         return false;
 
-    if(static_cast<quint8>(data.at(2) != (static_cast<quint8>(data.at(3)) ^ static_cast<quint8>(0xFF))))
+    if((static_cast<quint8>(data.at(2)) xor static_cast<quint8>(data.at(3))) != 0xFF)
         return false;
 
     return true;

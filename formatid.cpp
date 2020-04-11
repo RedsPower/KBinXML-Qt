@@ -1,4 +1,5 @@
 #include "formatid.h"
+#include <QDebug>
 
 void formatID::init()
 {
@@ -38,58 +39,61 @@ void formatID::init()
         {
             QString typeString;
 
-            switch(n)
+            if(j == 1 && n > 7 and i < 14)
             {
-            case 0:
-                typeString = "s8";
-                break;
-            case 1:
-                typeString = "u8";
-                break;
-            case 2:
-                typeString = "s16";
-                break;
-            case 3:
-                typeString = "u16";
-                break;
-            case 4:
-                typeString = "s32";
-                break;
-            case 5:
-                typeString = "u32";
-                break;
-            case 6:
-                typeString = "s64";
-                break;
-            case 7:
-                typeString = "u64";
-                break;
-            case 8:
-                typeString = "f";
-                break;
-            case 9:
-                typeString = "d";
-                break;
+                if(i == 10)
+                    typeString = "bin";
+                else if(i == 11)
+                    typeString = "str";
+                else if(i == 12)
+                    typeString = "ip4";
+                else if(i == 13)
+                    typeString = "time";
+                else
+                    ++n;
+                --n;
+            }
+            else
+            {
+                switch(n)
+                {
+                case 0:
+                    typeString = "s8";
+                    break;
+                case 1:
+                    typeString = "u8";
+                    break;
+                case 2:
+                    typeString = "s16";
+                    break;
+                case 3:
+                    typeString = "u16";
+                    break;
+                case 4:
+                    typeString = "s32";
+                    break;
+                case 5:
+                    typeString = "u32";
+                    break;
+                case 6:
+                    typeString = "s64";
+                    break;
+                case 7:
+                    typeString = "u64";
+                    break;
+                case 8:
+                    typeString = "f";
+                    break;
+                case 9:
+                    typeString = "d";
+                    break;
+                }
             }
 
             if(j != 1)
                 typeString = QString("%1").arg(j) + typeString;
 
-            if(j == 1 && n > 7)
-            {
-                if(i == 10)
-                    keyMap.insert(i, "bin");
-                else if(i == 11)
-                    keyMap.insert(i, "str");
-                else if(i == 12)
-                    keyMap.insert(i, "ip4");
-                else if(i == 13)
-                    keyMap.insert(i, "time");
-
-                --n;
-            }
-            else
-                keyMap.insert(i, typeString);
+            keyMap.insert(i, typeString);
 
         }
     }
@@ -118,6 +122,7 @@ void formatID::init()
 
     keyMap.insert(0xBE, "nodeEnd");
     keyMap.insert(0xBF, "xmlEnd");
+    qDebug() << keyMap;
 }
 
 QString formatID::stringConvert(QString string)
@@ -133,9 +138,9 @@ QString formatID::stringConvert(QString string)
     if(string == "bool")
         string = "b";
 
-    if(string == "vs32" || string == "vu32")
+    if(string == "vs32" or string == "vu32")
         string[0] = '4';
-    if(string == "vs64" || string == "vu64")
+    if(string == "vs64" or string == "vu64")
         string[0] = '2';
     if(string == "vf")
         string[0] = '4';

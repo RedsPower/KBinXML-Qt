@@ -3,9 +3,9 @@
 
 #include <QHash>
 #include <QSet>
+#include "KBinXML-Qt_global.h"
 
-
-class formatID
+class KBINXMLQT_EXPORT formatID
 {
 public:
     formatID(quint8 typeID);
