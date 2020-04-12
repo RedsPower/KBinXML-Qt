@@ -110,6 +110,10 @@ void formatID::init()
     keyMap.insert(56, "vb");
 
     //------------------------------------------------------------------------------------------------
+
+    keyMap.insert(0xBE, "nodeEnd");
+    keyMap.insert(0xBF, "xmlEnd");
+
     //------------------------------------------------------------------------------------------------
 
     QHash<quint8, QString>::const_iterator iterator;
@@ -117,12 +121,6 @@ void formatID::init()
     {
         strMap.insert(iterator.value(), iterator.key());
     }
-
-    //------------------------------------------------------------------------------------------------
-
-    keyMap.insert(0xBE, "nodeEnd");
-    keyMap.insert(0xBF, "xmlEnd");
-    qDebug() << keyMap;
 }
 
 QString formatID::stringConvert(QString string)
@@ -153,6 +151,7 @@ QString formatID::stringConvert(QString string)
 formatID::formatID(quint8 typeID)
 {
     init();
+    Q_ASSERT(keyMap.keys().contains(typeID));
     id = typeID;
 }
 
@@ -160,6 +159,7 @@ formatID::formatID(QString typeStr)
 {
     init();
     typeStr = stringConvert(typeStr);
+    Q_ASSERT(strMap.keys().contains(typeStr));
     id = strMap[typeStr];
 }
 

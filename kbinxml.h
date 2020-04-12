@@ -13,6 +13,8 @@
 
 class dataType;
 
+const int KBinPaddingSize = 4;
+
 class KBINXMLQT_EXPORT KBinXML
 {
 public:
@@ -20,8 +22,9 @@ public:
     KBinXML(QByteArray binaryData);
     KBinXML(QString xml);
     QString toXML();
-    QByteArray toBin(QString targetCodec = "SHIFT-JIS");
+    QByteArray toBin(QString targetCodec = QString("Shift-JIS"));
     bool isLoaded() const;
+    QByteArray testFunc(QString testStr = "Shift-JIS");
 
 private:
     bool isKBin();
@@ -31,9 +34,9 @@ private:
     QByteArray readRawData(QDataStream &stream, quint32 len);
     void writeRawData(QDataStream &stream, QByteArray data);
     //QByteArray readData(QDataStream &stream);
-    void readPaddingBytes(QDataStream &stream, int size = 4);
-    void writePaddingBytes(QDataStream &stream, int size = 4);
-    void writePaddingBytes(QDataStream &stream, QByteArray data, int size = 4);
+    void readPaddingBytes(QDataStream &stream, int size = KBinPaddingSize);
+    void writePaddingBytes(QDataStream &stream, int size = KBinPaddingSize);
+    void writePaddingBytes(QDataStream &stream, QByteArray data, int size = KBinPaddingSize);
 
     dataType typePrase(QString typeString);
 
@@ -54,7 +57,7 @@ private:
 
     void processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream, QTextCodec *outputCodec);
 
-    QByteArray xmlData;
+    QString xmlData;
     QByteArray binData;
     bool loaded;
     bool isSixBitCoded;
