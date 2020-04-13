@@ -22,16 +22,16 @@ public:
     KBinXML(QByteArray binaryData);
     KBinXML(QString xml);
     QString toXML();
-    QByteArray toBin(QString targetCodec = QString("Shift-JIS"));
+    QByteArray toBin(QString targetCodec = "Shift-JIS");
     bool isLoaded() const;
     QByteArray testFunc(QString testStr = "Shift-JIS");
 
 private:
     bool isKBin();
-    static bool isKBin(QByteArray data);
+    static bool isKBin(const QByteArray &data);
 
     //QByteArray readDataFromStream(QDataStream &stream);
-    QByteArray readRawData(QDataStream &stream, quint32 len);
+    QByteArray readRawData(QDataStream &stream, quint32 size);
     void writeRawData(QDataStream &stream, QByteArray data);
     //QByteArray readData(QDataStream &stream);
     void readPaddingBytes(QDataStream &stream, int size = KBinPaddingSize);
@@ -55,13 +55,17 @@ private:
 
     template <typename T> QList<T> praseDataString(QString string);
 
-    void processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream, QTextCodec *outputCodec);
+    void processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream);
 
-    QString xmlData;
+    void writeNodeName(QDataStream &stream, QString nodeName);
+
+    QByteArray xmlData;
     QByteArray binData;
     bool loaded;
     bool isSixBitCoded;
     QString XMLEncoding;
+
+    QTextCodec *xmlCodec;
 
     size_t singleDataSize = 0;
     quint32 readedDataSize = 0;

@@ -8,7 +8,7 @@ class KBINXMLQT_EXPORT sixBit
 {
 public:
     sixBit();
-    static QByteArray compress(QByteArray data);
+    static QByteArray compress(const QByteArray &data);
     static QByteArray decompress(QDataStream &stream);
 private:
     static QByteArray QBitAToQByteA(QBitArray data);

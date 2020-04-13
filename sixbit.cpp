@@ -10,14 +10,14 @@ sixBit::sixBit()
 
 }
 
-QByteArray sixBit::compress(QByteArray data)
+QByteArray sixBit::compress(const QByteArray &data)
 {
     QBitArray bitArray;
     QByteArray result;
     QByteArray codedData;
-    for(int i = 0; i < data.length(); ++i)
+    for(qint8 i : data)
     {
-        codedData.append(static_cast<char>(charmap.indexOf(data.at(i))));
+        codedData.append(static_cast<char>(charmap.indexOf(i)));
     }
 
     bitArray.resize((data.length() * 6));

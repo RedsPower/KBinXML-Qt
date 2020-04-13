@@ -86,7 +86,7 @@ typedef struct
 
 void init( void )
 {
-    encodingFlag.insert(0x00, "Shift-JIS");
+    encodingFlag.insert(0x00, "cp932");
     encodingFlag.insert(0x20, "ASCII");
     encodingFlag.insert(0x40, "ISO-8859-1");
     encodingFlag.insert(0x60, "EUC-JP");
@@ -107,7 +107,7 @@ KBinXML::KBinXML()
 
 KBinXML::KBinXML(QByteArray binaryData)
 {
-    QString result;
+    QByteArray result;
     QXmlStreamWriter writer(&result);
     QDataStream stream(binaryData);
     QByteArray nodeData;
@@ -155,11 +155,11 @@ KBinXML::KBinXML(QByteArray binaryData)
     QDataStream dataStream(data);
 
     hasNodeLeft = true;
-    QTextCodec *codec = QTextCodec::codecForName(XMLEncoding.toUtf8());
+    xmlCodec = QTextCodec::codecForName(XMLEncoding.toLocal8Bit());
 
+    writer.setCodec(xmlCodec);
     writer.setAutoFormatting(true);
     writer.writeStartDocument("1.0");
-    writer.setCodec(codec);
 
     while (hasNodeLeft and !nodeStream.atEnd())
     {
@@ -297,7 +297,7 @@ KBinXML::KBinXML(QByteArray binaryData)
             QByteArray bytearray = readDataArray(dataStream);
             if(bytearray.count() % KBinPaddingSize == 0)
                 readRawData(dataStream, KBinPaddingSize);
-            writer.writeCharacters(codec->toUnicode(bytearray));
+            writer.writeCharacters(xmlCodec->toUnicode(bytearray));
         }
         break;
         case node_start:
@@ -417,7 +417,7 @@ KBinXML::KBinXML(QByteArray binaryData)
 KBinXML::KBinXML(QString xml)
 {
     init();
-    xmlData = xml;
+    xmlData = xml.toLatin1();
     isSixBitCoded = true;
 }
 
@@ -429,14 +429,14 @@ QString KBinXML::toXML()
 
 QByteArray KBinXML::toBin(QString targetCodec)
 {
-    //Q_ASSERT(encodingFlagMap.keys().contains(targetCodec));
+    Q_ASSERT(encodingFlagMap.keys().contains(targetCodec));
     //QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toLocal8Bit());
 
     //QXmlStreamReader reader(xmlData);
-    QByteArray node1Array;
+    QByteArray nodeArray;
     QDomDocument doc;
     QByteArray result;
-    QByteArray data2Array;
+    QByteArray dataArray;
 
 
     //XMLEncoding = reader.documentEncoding().toString();
@@ -446,9 +446,9 @@ QByteArray KBinXML::toBin(QString targetCodec)
     doc.setContent(xmlData);
     QDomNode root = doc.documentElement();
 
-    QDataStream nodeStream(node1Array);
-    QDataStream dataStream(data2Array);
-    QDataStream resultStream(result);
+    QDataStream nodeStream(&nodeArray, QIODevice::ReadWrite);
+    QDataStream dataStream(&dataArray, QIODevice::ReadWrite);
+    QDataStream resultStream(&result, QIODevice::ReadWrite);
 
     nodeStream.setVersion(QDataStream::Qt_5_12);
     nodeStream.setByteOrder(QDataStream::BigEndian);
@@ -654,19 +654,21 @@ QByteArray KBinXML::toBin(QString targetCodec)
 
     //QTextCodec *inputCodec = QTextCodec::codecForName(XMLEncoding.toLocal8Bit());
 
+
     {
-        QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toUtf8()); //??????????反复报错，原因不明
-        processNodes(root, nodeStream, dataStream, outputCodec);
+
+        //QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toUtf8()); //??????????反复报错，原因不明
+        xmlCodec = QTextCodec::codecForName(targetCodec.toUtf8());
+        processNodes(root, nodeStream, dataStream);
+
     }
     nodeStream << static_cast<quint8>(formatID("xmlEnd").toID() | 0x40);
-    writePaddingBytes(nodeStream, node1Array);
-    writePaddingBytes(dataStream, data2Array);
+    writePaddingBytes(nodeStream, nodeArray);
+    writePaddingBytes(dataStream, dataArray);
 
-    resultStream << data2Array;
-    resultStream << nodeStream;
+    resultStream << nodeArray;
+    resultStream << dataArray;
 
-
-    result = "testStr";
     binData = result;
     return result;
 }
@@ -687,9 +689,8 @@ bool KBinXML::isKBin()
     return isKBin(binData);
 }
 
-bool KBinXML::isKBin(QByteArray data)
+bool KBinXML::isKBin(const QByteArray &data)
 {
-    QString xmlEncoding;
     init();
 
     if(static_cast<quint8>(data.at(0)) != MAGIC_NUMBER)
@@ -1061,7 +1062,7 @@ void KBinXML::appendDataArray(QDataStream &stream, QByteArray data)
     writePaddingBytes(stream);
 }
 
-void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream, QTextCodec *outputCodec)
+void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &dataStream)
 {
     if(node.isElement())
     {
@@ -1091,18 +1092,10 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                 isArray = true;
             }
 
-            nodeStream << (formatID(nodeTypeString).toID() | (isArray ? 0x40 : 0));
+            nodeStream << static_cast<quint8>(formatID(nodeTypeString).toID() | (isArray ? 0x40 : 0));
 
             QString nodeName = element.tagName();
-            if(isSixBitCoded)
-            {
-                nodeStream << sixBit::compress(outputCodec->fromUnicode(nodeName));
-            }
-            else
-            {
-                nodeStream << static_cast<quint8>((nodeName.length() - 1) | 0x40);
-                writeRawData(nodeStream, outputCodec->fromUnicode(nodeName));
-            }
+            writeNodeName(nodeStream, nodeName);
 
             if(nodeTypeString != "void")
             {
@@ -1126,9 +1119,9 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                     }
                     else if(parsedDataType.varType == str)
                     {
-                        appendDataArray(dataStream, outputCodec->fromUnicode(data));
-                        if(outputCodec->fromUnicode(data).size() % KBinPaddingSize == 0)
-                            writeRawData(dataStream, QByteArray::fromHex("00000000"));
+                        appendDataArray(dataStream, xmlCodec->fromUnicode(data));
+                        if(xmlCodec->fromUnicode(data).size() % KBinPaddingSize == 0)
+                            writeRawData(dataStream, QByteArray(KBinPaddingSize, 0));
                     }
                     else
                     {
@@ -1229,28 +1222,33 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                 if(attrib.name() != "__type" and attrib.name() != "__count" and attrib.name() != "__type")
                 {
                     nodeStream << formatID("attr").toID();
-                    if(isSixBitCoded)
-                    {
-                        nodeStream << sixBit::compress(outputCodec->fromUnicode(attrib.name()));
-                    }
-                    else
-                    {
-                        nodeStream << static_cast<quint8>((attrib.name().length() - 1) | 0x40);
-                        writeRawData(nodeStream, outputCodec->fromUnicode(attrib.name()));
-                    }
-                    appendDataArray(dataStream, outputCodec->fromUnicode(attrib.value()));
+                    writeNodeName(nodeStream, attrib.name());
+                    appendDataArray(dataStream, xmlCodec->fromUnicode(attrib.value()));
                 }
             }
 
 
             for(auto childNode = element.firstChildElement(); not childNode.isNull(); childNode = childNode.nextSiblingElement())
             {
-                qDebug() << childNode.tagName() << childNode.nodeType();
-                processNodes(childNode, nodeStream, dataStream, outputCodec);
+                //qDebug() << childNode.tagName() << childNode.nodeType();
+                processNodes(childNode, nodeStream, dataStream);
             }
             nodeStream << static_cast<quint8>(formatID("nodeEnd").toID() | 0x40);
-            qDebug() << "nodeEnd";
+            //qDebug() << "nodeEnd";
         }
+    }
+}
+
+void KBinXML::writeNodeName(QDataStream &stream, QString nodeName)
+{
+    if(isSixBitCoded)
+    {
+        writeRawData(stream, sixBit::compress(xmlCodec->fromUnicode(nodeName)));
+    }
+    else
+    {
+        stream << static_cast<quint8>((nodeName.length() - 1) | 0x40);
+        writeRawData(stream, xmlCodec->fromUnicode(nodeName));
     }
 }
 
