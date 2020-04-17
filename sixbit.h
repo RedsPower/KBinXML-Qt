@@ -1,10 +1,9 @@
 #ifndef SIXBIT_H
 #define SIXBIT_H
 
-#include "KBinXML-Qt_global.h"
 #include <QObject>
 
-class KBINXMLQT_EXPORT sixBit
+class sixBit
 {
 public:
     sixBit();
