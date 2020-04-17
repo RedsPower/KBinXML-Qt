@@ -9,9 +9,11 @@
 #include <QDebug>
 
 #define WRITEDATATOXML(type, isArray)                                                                           \
-QList<type> tmpList = isArray ? readData<type>(dataStream, nodeType.count) : readDataArray<type>(dataStream);   \
+QList<type> tmpList = isArray ? readDataArray<type>(dataStream) : readData<type>(dataStream, nodeType.count);   \
+elementCount = tmpList.size();                                                                                  \
 QString tmpString = genDataString<type>(tmpList);                                                               \
-writer.writeCharacters(tmpString)
+QDomText value = doc.createTextNode(tmpString);                                                                 \
+node.appendChild(value)
 
 #define WRITEDATATOBIN(type, isArray)                                                                               \
 QList<type> dataList;                                                                                               \
@@ -21,7 +23,7 @@ for(QString string : spiltedDataList)                                           
     dataList.append(static_cast<type>(stringToVar<type>(string, &ok)));                                             \
     Q_ASSERT(ok);                                                                                                   \
 }                                                                                                                   \
-isArray ? appendData<type>(dataStream, dataList, parsedDataType.count) : appendDataArray<type>(dataStream, dataList)
+isArray ? appendDataArray<type>(dataStream, dataList) : appendData<type>(dataStream, dataList, parsedDataType.count)
 
 #include "sixbit.h"
 #include "formatid.h"
@@ -105,323 +107,29 @@ KBinXML::KBinXML()
     init();
 }
 
-KBinXML::KBinXML(QByteArray binaryData)
-{
-    QByteArray result;
-    QXmlStreamWriter writer(&result);
-    QDataStream stream(binaryData);
-    QByteArray nodeData;
-    QByteArray data;
-
-    bool hasNodeLeft;
-
-    init();
-    binData = binaryData;
-    stream.setVersion(QDataStream::Qt_5_12);
-    stream.setByteOrder(QDataStream::BigEndian);
-
-    if(!isKBin())
-    {
-        loaded = false;
-        return;
-    }
-
-    {
-        quint8 tempu8;
-        stream >> tempu8;
-
-        Q_ASSERT(tempu8 == MAGIC_NUMBER);
-
-        stream >> tempu8;
-        if(tempu8 == SIG_COMPRESS)
-            isSixBitCoded = true;
-        else if(tempu8 == SIG_UNCOMPRESS)
-            isSixBitCoded = false;
-        else
-            qFatal("compress tag failed");
-
-        stream >> tempu8;
-        XMLEncoding = encodingFlag[tempu8];
-        Q_ASSERT(not XMLEncoding.isEmpty());
-
-        Q_ASSERT((tempu8 & 0xFF) != (static_cast<void>(stream >> tempu8), tempu8));
-    }
-
-
-    nodeData = readDataArray(stream);
-    data = readDataArray(stream);
-
-    QDataStream nodeStream(nodeData);
-    QDataStream dataStream(data);
-
-    hasNodeLeft = true;
-    xmlCodec = QTextCodec::codecForName(XMLEncoding.toLocal8Bit());
-
-    writer.setCodec(xmlCodec);
-    writer.setAutoFormatting(true);
-    writer.writeStartDocument("1.0");
-
-    while (hasNodeLeft and !nodeStream.atEnd())
-    {
-        quint8 nodeID;
-        nodeStream >> nodeID;
-        bool isArray = nodeID & 0x40;
-        nodeID &= ~0x40;
-
-        dataType nodeType = typePrase(formatID(nodeID).toString());
-
-        if(!isArray)
-            nodeType.arraySize = INVAILD;
-
-        if(nodeType.varType == node_end)
-        {
-            writer.writeEndElement();
-            continue;
-        }
-        if(nodeType.varType == doc_end)
-        {
-            writer.writeEndDocument();
-            hasNodeLeft = false;
-            continue;
-        }
-
-        QString nodeName;
-        if(isSixBitCoded)
-            nodeName = sixBit::decompress(nodeStream);
-        else
-        {
-            quint8 len;
-            nodeStream >> len;
-            len = (len & ~0x40) + 1;
-            nodeName = readRawData(nodeStream, len);
-        }
-
-        if(nodeType.varType != attr)
-        {
-            writer.writeStartElement(nodeName);
-            if(nodeType.varType == node_start)
-                continue;
-        }
-
-        if(nodeType.varType != attr)
-            writer.writeAttribute("__type", formatID(nodeID).toString());
-
-        if(nodeType.varType == attr)
-        {
-            QString value = readDataArray(dataStream);
-            writer.writeAttribute(nodeName, value);
-            continue;
-        }
-
-        switch (nodeType.varType)
-        {
-        case b:
-        case s8:
-        {
-            WRITEDATATOXML(qint8, isArray);
-        }
-        break;
-        case u8:
-        {
-            WRITEDATATOXML(quint8, isArray);
-        }
-        break;
-        case s16:
-        {
-            WRITEDATATOXML(qint16, isArray);
-        }
-        break;
-        case u16:
-        {
-            WRITEDATATOXML(quint16, isArray);
-        }
-        break;
-        case s32:
-        {
-            WRITEDATATOXML(qint32, isArray);
-        }
-        break;
-        case UNIXtime:
-        {
-            Q_ASSERT(nodeType.count == 1);
-        }
-            Q_FALLTHROUGH();
-        case u32:
-        {
-            WRITEDATATOXML(quint32, isArray);
-        }
-        break;
-        case s64:
-        {
-            WRITEDATATOXML(qint64, isArray);
-        }
-        break;
-        case u64:
-        {
-            WRITEDATATOXML(quint64, isArray);
-        }
-        break;
-        case f:
-        {
-            WRITEDATATOXML(float, isArray);
-        }
-        break;
-        case d:
-        {
-            WRITEDATATOXML(double, isArray);
-        }
-        break;
-        case ip4:
-        {
-            Q_ASSERT(nodeType.count == 1);
-
-            QList<quint32> ipList = isArray ? readData<quint32>(dataStream, nodeType.count) : readDataArray<quint32>(dataStream);
-            QStringList stringList;
-            for(quint32 ipv4 : ipList)
-            {
-                QString tmpString = QHostAddress(ipv4).toString();
-                stringList.append(tmpString);
-
-            }
-            QString tmpString = genDataString<QString>(stringList);
-            writer.writeCharacters(tmpString);
-        }
-        break;
-        case binary:
-        {
-            writer.writeCharacters(readDataArray(dataStream).toHex().toUpper());
-        }
-        break;
-        case str:
-        {
-            QByteArray bytearray = readDataArray(dataStream);
-            if(bytearray.count() % KBinPaddingSize == 0)
-                readRawData(dataStream, KBinPaddingSize);
-            writer.writeCharacters(xmlCodec->toUnicode(bytearray));
-        }
-        break;
-        case node_start:
-        case node_end:
-        case attr:
-        case doc_end:
-            break;
-        }
-
-        if(isArray)
-        {
-            /*
-            switch (nodeType.varType)
-            {
-            case b:
-            case s8:
-            {
-                WRITEDATAARRAYTOXML(qint8);
-            }
-            break;
-            case u8:
-            {
-                WRITEDATAARRAYTOXML(quint8);
-            }
-            break;
-            case s16:
-            {
-                WRITEDATAARRAYTOXML(qint16);
-            }
-            break;
-            case u16:
-            {
-                WRITEDATAARRAYTOXML(quint16);
-            }
-            break;
-            case s32:
-            {
-                WRITEDATAARRAYTOXML(qint32);
-            }
-            break;
-            case UNIXtime:
-            {
-                Q_ASSERT(nodeType.count == 1);
-            }
-                Q_FALLTHROUGH();
-            case u32:
-            {
-                WRITEDATAARRAYTOXML(quint32);
-            }
-            break;
-            case s64:
-            {
-                WRITEDATAARRAYTOXML(qint64);
-            }
-            break;
-            case u64:
-            {
-                WRITEDATAARRAYTOXML(quint64);
-            }
-            break;
-            case f:
-            {
-                WRITEDATAARRAYTOXML(float);
-            }
-            break;
-            case d:
-            {
-                WRITEDATAARRAYTOXML(double);
-            }
-            break;
-            case ip4:
-            {
-                Q_ASSERT(nodeType.count == 1);
-                QList<quint32> ipList = readDataArray<quint32>(dataStream);
-                QStringList stringList;
-                for(quint32 ipv4 : ipList)
-                {
-                    QString tmpString = QHostAddress(ipv4).toString();
-                    stringList.append(tmpString);
-
-                }
-                QString tmpString = genDataString<QString>(stringList);
-                writer.writeCharacters(tmpString);
-            }
-            break;
-            case binary:
-            {
-                QByteArray binData = readDataArray(dataStream);
-                writer.writeCharacters(binData.toHex().toUpper());
-            }
-            break;
-            case str:
-            {
-                QString string = codec->toUnicode(readDataArray(dataStream));
-                writer.writeCharacters(string);
-            }
-            break;
-            case node_start:
-            case node_end:
-            case attr:
-            case doc_end:
-                break;
-            }
-            */
-                writer.writeAttribute("__count", QString("%1")
-                                                     .arg(readedDataSize / static_cast<quint32>(nodeType.size * nodeType.count)));
-        }
-
-
-    }
-
-    xmlData = result;
-    loaded = true;
-
-}
-
-KBinXML::KBinXML(QString xml)
+KBinXML::KBinXML(QByteArray data)
 {
     init();
-    xmlData = xml.toLatin1();
-    isSixBitCoded = true;
+    if(isKBin(data))
+        fromBin(data);
+    else
+    {
+        fromXML(data);
+    }
 }
 
-QString KBinXML::toXML()
+KBinXML::KBinXML(QByteArray data, bool isBin)
+{
+    init();
+    if(isBin)
+        fromBin(data);
+    else
+    {
+        fromXML(data);
+    }
+}
+
+QByteArray KBinXML::toXML()
 {
     Q_ASSERT(not xmlData.isEmpty());
     return xmlData;
@@ -430,7 +138,6 @@ QString KBinXML::toXML()
 QByteArray KBinXML::toBin(QString targetCodec)
 {
     Q_ASSERT(encodingFlagMap.keys().contains(targetCodec));
-    //QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toLocal8Bit());
 
     //QXmlStreamReader reader(xmlData);
     QByteArray nodeArray;
@@ -438,12 +145,7 @@ QByteArray KBinXML::toBin(QString targetCodec)
     QByteArray result;
     QByteArray dataArray;
 
-
-    //XMLEncoding = reader.documentEncoding().toString();
-
-    //QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toLocal8Bit());
-
-    doc.setContent(xmlData);
+    Q_ASSERT(doc.setContent(xmlData, false));
     QDomNode root = doc.documentElement();
 
     QDataStream nodeStream(&nodeArray, QIODevice::ReadWrite);
@@ -654,14 +356,9 @@ QByteArray KBinXML::toBin(QString targetCodec)
 
     //QTextCodec *inputCodec = QTextCodec::codecForName(XMLEncoding.toLocal8Bit());
 
+    xmlCodec = QTextCodec::codecForName(targetCodec.toUtf8());
+    processNodes(root, nodeStream, dataStream);
 
-    {
-
-        //QTextCodec *outputCodec = QTextCodec::codecForName(targetCodec.toUtf8()); //??????????反复报错，原因不明
-        xmlCodec = QTextCodec::codecForName(targetCodec.toUtf8());
-        processNodes(root, nodeStream, dataStream);
-
-    }
     nodeStream << static_cast<quint8>(formatID("xmlEnd").toID() | 0x40);
     writePaddingBytes(nodeStream, nodeArray);
     writePaddingBytes(dataStream, dataArray);
@@ -678,15 +375,348 @@ bool KBinXML::isLoaded() const
     return loaded;
 }
 
-QByteArray KBinXML::testFunc(QString testStr)
-{
-    QTextCodec *codec = QTextCodec::codecForName(testStr.toLocal8Bit());
-    return codec->fromUnicode(xmlData);
-}
-
 bool KBinXML::isKBin()
 {
     return isKBin(binData);
+}
+
+void KBinXML::fromBin(QByteArray binaryData)
+{
+    QByteArray result;
+    //QXmlStreamWriter writer(&result);
+    QDomDocument doc;
+    QDataStream stream(binaryData);
+    QByteArray nodeData;
+    QByteArray data;
+
+    bool hasNodeLeft;
+
+    binData = binaryData;
+    stream.setVersion(QDataStream::Qt_5_12);
+    stream.setByteOrder(QDataStream::BigEndian);
+
+    if(!isKBin())
+    {
+        loaded = false;
+        return;
+    }
+
+    {
+        quint8 tempu8;
+        stream >> tempu8;
+
+        Q_ASSERT(tempu8 == MAGIC_NUMBER);
+
+        stream >> tempu8;
+        if(tempu8 == SIG_COMPRESS)
+            isSixBitCoded = true;
+        else if(tempu8 == SIG_UNCOMPRESS)
+            isSixBitCoded = false;
+        else
+            qFatal("compress tag failed");
+
+        stream >> tempu8;
+        XMLEncoding = encodingFlag[tempu8];
+        Q_ASSERT(not XMLEncoding.isEmpty());
+
+        Q_ASSERT((tempu8 & 0xFF) != (static_cast<void>(stream >> tempu8), tempu8));
+    }
+
+
+    stream >> nodeData;
+    stream >> data;
+
+    QDataStream nodeStream(nodeData);
+    QDataStream dataStream(data);
+
+    hasNodeLeft = true;
+    xmlCodec = QTextCodec::codecForName(XMLEncoding.toUtf8());
+
+    QDomProcessingInstruction xmlHead = doc.createProcessingInstruction("xml", QString("version=\"1.0\" encoding=\"%1\"").arg("UTF-8"));
+    doc.appendChild(xmlHead);
+    QDomNode node;
+    node = doc;
+
+    while (hasNodeLeft and !nodeStream.atEnd())
+    {
+        quint8 nodeID;
+        nodeStream >> nodeID;
+        bool isArray = nodeID & 0x40;
+        nodeID &= ~0x40;
+
+        dataType nodeType = typePrase(formatID(nodeID).toString());
+
+        if(!isArray)
+            nodeType.arraySize = INVAILD;
+
+        if(nodeType.varType == node_end)
+        {
+            node = node.parentNode();
+            continue;
+        }
+        if(nodeType.varType == doc_end)
+        {
+            while(not node.parentNode().isNull())
+                node = node.parentNode();
+
+            hasNodeLeft = false;
+            continue;
+        }
+
+        QString nodeName;
+        if(isSixBitCoded)
+            nodeName = sixBit::decompress(nodeStream);
+        else
+        {
+            quint8 len;
+            nodeStream >> len;
+            len = (len & ~0x40) + 1;
+            nodeName = readRawData(nodeStream, len);
+        }
+
+        if(nodeType.varType != attr)
+        {
+            auto child = doc.createElement(nodeName);
+            node.appendChild(child);
+            node = child;
+            if(nodeType.varType == node_start)
+                continue;
+        }
+
+        if(nodeType.varType != attr)
+        {
+            //数据类型属性
+            node.toElement().setAttribute("__type", formatID(nodeID).toString());
+        }
+
+        if(nodeType.varType == attr)
+        {
+            QByteArray value = readDataArray(dataStream);
+            Q_ASSERT(value.back() == '\0');
+            value.remove(value.length() - 1, 1);
+
+            node.toElement().setAttribute(nodeName, xmlCodec->toUnicode(value));
+            continue;
+        }
+
+        int elementCount = 0;
+        switch (nodeType.varType)
+        {
+        case b:
+        case s8:
+        {
+            WRITEDATATOXML(qint8, isArray);
+        }
+        break;
+        case u8:
+        {
+            WRITEDATATOXML(quint8, isArray);
+        }
+        break;
+        case s16:
+        {
+            WRITEDATATOXML(qint16, isArray);
+        }
+        break;
+        case u16:
+        {
+            WRITEDATATOXML(quint16, isArray);
+        }
+        break;
+        case s32:
+        {
+            WRITEDATATOXML(qint32, isArray);
+        }
+        break;
+        case UNIXtime:
+        {
+            Q_ASSERT(nodeType.count == 1);
+        }
+            Q_FALLTHROUGH();
+        case u32:
+        {
+            WRITEDATATOXML(quint32, isArray);
+        }
+        break;
+        case s64:
+        {
+            WRITEDATATOXML(qint64, isArray);
+        }
+        break;
+        case u64:
+        {
+            WRITEDATATOXML(quint64, isArray);
+        }
+        break;
+        case f:
+        {
+            WRITEDATATOXML(float, isArray);
+        }
+        break;
+        case d:
+        {
+            WRITEDATATOXML(double, isArray);
+        }
+        break;
+        case ip4:
+        {
+            Q_ASSERT(nodeType.count == 1);
+
+            QList<quint32> ipList = isArray ? readDataArray<quint32>(dataStream) : readData<quint32>(dataStream, nodeType.count);
+            QStringList stringList;
+            for(quint32 ipv4 : ipList)
+            {
+                QString tmpString = QHostAddress(ipv4).toString();
+                stringList.append(tmpString);
+
+            }
+            elementCount = ipList.count();
+            QString tmpString = genDataString<QString>(stringList);
+            //writer.writeCharacters(tmpString);
+            QDomText value = doc.createTextNode(tmpString);
+            node.appendChild(value);
+        }
+        break;
+        case binary:
+        {
+            Q_ASSERT(not isArray);
+            //writer.writeCharacters(readDataArray(dataStream).toHex().toUpper());
+            QDomText value = doc.createTextNode(readDataArray(dataStream).toHex().toUpper());
+            node.appendChild(value);
+        }
+        break;
+        case str:
+        {
+            Q_ASSERT(not isArray);
+            QByteArray bytearray = readDataArray(dataStream);
+            Q_ASSERT(bytearray.back() == '\0');
+            bytearray.remove(bytearray.length() - 1, 1);
+            //writer.writeCharacters(xmlCodec->toUnicode(bytearray));
+            QDomText value = doc.createTextNode(xmlCodec->toUnicode(bytearray));
+            node.appendChild(value);
+        }
+        break;
+        case node_start:
+        case node_end:
+        case attr:
+        case doc_end:
+            break;
+        }
+
+        if(isArray)
+        {
+            /*
+            switch (nodeType.varType)
+            {
+            case b:
+            case s8:
+            {
+                WRITEDATAARRAYTOXML(qint8);
+            }
+            break;
+            case u8:
+            {
+                WRITEDATAARRAYTOXML(quint8);
+            }
+            break;
+            case s16:
+            {
+                WRITEDATAARRAYTOXML(qint16);
+            }
+            break;
+            case u16:
+            {
+                WRITEDATAARRAYTOXML(quint16);
+            }
+            break;
+            case s32:
+            {
+                WRITEDATAARRAYTOXML(qint32);
+            }
+            break;
+            case UNIXtime:
+            {
+                Q_ASSERT(nodeType.count == 1);
+            }
+                Q_FALLTHROUGH();
+            case u32:
+            {
+                WRITEDATAARRAYTOXML(quint32);
+            }
+            break;
+            case s64:
+            {
+                WRITEDATAARRAYTOXML(qint64);
+            }
+            break;
+            case u64:
+            {
+                WRITEDATAARRAYTOXML(quint64);
+            }
+            break;
+            case f:
+            {
+                WRITEDATAARRAYTOXML(float);
+            }
+            break;
+            case d:
+            {
+                WRITEDATAARRAYTOXML(double);
+            }
+            break;
+            case ip4:
+            {
+                Q_ASSERT(nodeType.count == 1);
+                QList<quint32> ipList = readDataArray<quint32>(dataStream);
+                QStringList stringList;
+                for(quint32 ipv4 : ipList)
+                {
+                    QString tmpString = QHostAddress(ipv4).toString();
+                    stringList.append(tmpString);
+
+        }
+        QString tmpString = genDataString<QString>(stringList);
+        writer.writeCharacters(tmpString);
+    }
+    break;
+case binary:
+{
+    QByteArray binData = readDataArray(dataStream);
+    writer.writeCharacters(binData.toHex().toUpper());
+}
+break;
+case str:
+{
+    QString string = codec->toUnicode(readDataArray(dataStream));
+    writer.writeCharacters(string);
+}
+break;
+case node_start:
+case node_end:
+case attr:
+case doc_end:
+    break;
+}
+*/
+    //writer.writeAttribute("__count", QString("%1")
+    //                                     .arg(readedDataSize / static_cast<quint32>(nodeType.size * nodeType.count)));
+        Q_ASSERT(elementCount != 0);
+        node.toElement().setAttribute("__count", QString("%1")
+                                                     .arg(elementCount / nodeType.count));
+        }
+
+    }
+
+    result = doc.toByteArray(4);
+    xmlData = result;
+    loaded = true;
+
+}
+
+void KBinXML::fromXML(QByteArray data)
+{
+    xmlData = data;
+    isSixBitCoded = true;
 }
 
 bool KBinXML::isKBin(const QByteArray &data)
@@ -830,11 +860,13 @@ dataType KBinXML::typePrase(QString typeString)
         || typeString == "nodeEnd" || typeString == "xmlEnd")
         return result;
 
-    if(typeString[0] == 'v')
+    if(typeString.front() == 'v')
     {
         result.isVVar = true;
         typeString = typeString.right(typeString.length() - 1);
     }
+    else
+        result.isVVar = false;
     if(typeString.front().isDigit())
     {
         if(typeString.front() >= '2' && typeString.front() <= '4')
@@ -859,7 +891,7 @@ dataType KBinXML::typePrase(QString typeString)
     if(typeString == "u16")
         result.varType = u16;
     if(typeString == "s32")
-        typeString = s32;
+        result.varType = s32;
     if(typeString == "u32")
         result.varType = u32;
     if(typeString == "s64")
@@ -906,15 +938,13 @@ QList<T> KBinXML::readData(QDataStream &stream, int count)
     Q_ASSERT(count > 0);
     QList<T> result;
 
-    if(singleDataSize == 0)
-        singleDataSize = sizeof (T) * static_cast<unsigned int>(count);
-    else
+    if(sizeof (T) * static_cast<size_t>(count) != singleDataSize)
     {
-        if(sizeof (T) * static_cast<size_t>(count) != singleDataSize)
-        {
-            readPaddingBytes(stream);
-        }
+        readPaddingBytes(stream);
     }
+
+    singleDataSize = sizeof (T) * static_cast<unsigned int>(count);
+
     for(int i = 0; i < count; ++i)
     {
         T tmp;
@@ -941,7 +971,6 @@ QList<T> KBinXML::readDataArray(QDataStream &stream)
         result.append(tmp);
     }
     readedDataSize = sizeof (quint32) + dataSize;
-    readPaddingBytes(stream);
     return result;
 }
 
@@ -952,15 +981,14 @@ QByteArray KBinXML::readDataArray(QDataStream &stream)
 
     readPaddingBytes(stream);
     stream >> result;
-    readedDataSize = static_cast<quint32>(result.size());
-    readPaddingBytes(stream);
+    readedDataSize = static_cast<quint32>(result.size()) + sizeof (quint32);
     return result;
 }
 
 void KBinXML::readPaddingBytes(QDataStream &stream, int size)
 {
     Q_ASSERT(size > 0);
-    for(quint32 i = readedDataSize % static_cast<quint32>(size); i % static_cast<quint32>(size) > 0; ++i)
+    for(quint32 i = readedDataSize % static_cast<quint32>(size); (i % static_cast<quint32>(size)) != 0; ++i)
     {
         quint8 padding;
         stream >> padding;
@@ -972,7 +1000,7 @@ void KBinXML::readPaddingBytes(QDataStream &stream, int size)
 
 void KBinXML::writePaddingBytes(QDataStream &stream, int size)
 {
-    for(quint32 i = writedDataSize % static_cast<quint32>(size); i % static_cast<quint32>(size); ++i)
+    for(quint32 i = writedDataSize % static_cast<quint32>(size); (i % static_cast<quint32>(size)) != 0; ++i)
     {
         stream << static_cast<quint8>('\0');
     }
@@ -1023,29 +1051,26 @@ void KBinXML::appendData(QDataStream &stream, QList<T> list, int count)
 {
     Q_ASSERT(list.count() == count);
 
-    if(singleDataSize == 0)
-        singleDataSize = sizeof (T) * static_cast<size_t>(count);
-    else
+    if(sizeof (T) * static_cast<size_t>(count) != singleDataSize)
     {
-        if(sizeof (T) * static_cast<size_t>(count) != singleDataSize)
-        {
-            writePaddingBytes(stream);
-            singleDataSize = 0;
-        }
+        writePaddingBytes(stream);
     }
 
-    for(int i = 0; i == list.count(); ++i)
+    singleDataSize = sizeof (T) * static_cast<size_t>(count);
+
+
+    for(T tmp : list)
     {
-        stream << list.at(i);
+        stream << tmp;
     }
-    writedDataSize += sizeof (T) * static_cast<size_t>(list.size());
+    writedDataSize += sizeof (T) * static_cast<size_t>(count);
 }
 
 template<class T>
 void KBinXML::appendDataArray(QDataStream &stream, QList<T> data)
 {
     writePaddingBytes(stream);
-    stream << static_cast<quint32>(data.size());
+    stream << static_cast<quint32>(data.size()) * sizeof (T);
     for(int i = 0; i < data.size(); ++i)
     {
         stream << data.at(i);
@@ -1103,7 +1128,7 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                 {
                     bool isArray;
                     QString data = element.firstChild().toText().data();
-                    dataType parsedDataType = typePrase(nodeTypeString);
+                    dataType parsedDataType = typePrase(formatID(nodeTypeString).toString());
                     if(element.hasAttribute("__count"))
                         parsedDataType.arraySize = element.attribute("__count").toInt();
                     else
@@ -1119,14 +1144,15 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                     }
                     else if(parsedDataType.varType == str)
                     {
-                        appendDataArray(dataStream, xmlCodec->fromUnicode(data));
-                        if(xmlCodec->fromUnicode(data).size() % KBinPaddingSize == 0)
-                            writeRawData(dataStream, QByteArray(KBinPaddingSize, 0));
+                        appendDataArray(dataStream, xmlCodec->fromUnicode(data) + '\0');
                     }
                     else
                     {
                         QStringList spiltedDataList = data.split(' ');
-                        if((parsedDataType.size * parsedDataType.count * (parsedDataType.arraySize == INVAILD ? 1 : parsedDataType.arraySize))
+                        //qDebug() << nodeTypeString;
+                        //qDebug() << parsedDataType.count << parsedDataType.arraySize;
+                        //qDebug() << spiltedDataList;
+                        if((parsedDataType.count * (parsedDataType.arraySize == INVAILD ? 1 : parsedDataType.arraySize))
                             != spiltedDataList.count())
                             qFatal("attr __count not fetch to arg");
 
@@ -1170,7 +1196,7 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                         break;
                         case s64:
                         {
-                            WRITEDATATOBIN(quint64, isArray);
+                            WRITEDATATOBIN(qint64, isArray);
                         }
                         break;
                         case u64:
@@ -1197,7 +1223,7 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                                 ipNumList.append(QHostAddress(ipString).toIPv4Address(&ok));
                                 Q_ASSERT(ok);
                             }
-                            isArray ? appendData<quint32>(dataStream, ipNumList) : appendDataArray(dataStream, ipNumList);
+                            isArray ? appendDataArray(dataStream, ipNumList) : appendData<quint32>(dataStream, ipNumList);
                         }
                         break;
                         case node_start:
@@ -1223,18 +1249,16 @@ void KBinXML::processNodes(QDomNode node, QDataStream &nodeStream, QDataStream &
                 {
                     nodeStream << formatID("attr").toID();
                     writeNodeName(nodeStream, attrib.name());
-                    appendDataArray(dataStream, xmlCodec->fromUnicode(attrib.value()));
+                    appendDataArray(dataStream, xmlCodec->fromUnicode(attrib.value() + '\0'));
                 }
             }
 
 
             for(auto childNode = element.firstChildElement(); not childNode.isNull(); childNode = childNode.nextSiblingElement())
             {
-                //qDebug() << childNode.tagName() << childNode.nodeType();
                 processNodes(childNode, nodeStream, dataStream);
             }
             nodeStream << static_cast<quint8>(formatID("nodeEnd").toID() | 0x40);
-            //qDebug() << "nodeEnd";
         }
     }
 }

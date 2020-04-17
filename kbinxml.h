@@ -19,16 +19,18 @@ class KBINXMLQT_EXPORT KBinXML
 {
 public:
     KBinXML();
-    KBinXML(QByteArray binaryData);
-    KBinXML(QString xml);
-    QString toXML();
+    KBinXML(QByteArray data);
+    KBinXML(QByteArray data, bool isBin);
+    QByteArray toXML();
     QByteArray toBin(QString targetCodec = "Shift-JIS");
     bool isLoaded() const;
-    QByteArray testFunc(QString testStr = "Shift-JIS");
+    static bool isKBin(const QByteArray &data);
 
 private:
     bool isKBin();
-    static bool isKBin(const QByteArray &data);
+
+    void fromBin(QByteArray binaryData);
+    void fromXML(QByteArray data);
 
     //QByteArray readDataFromStream(QDataStream &stream);
     QByteArray readRawData(QDataStream &stream, quint32 size);
