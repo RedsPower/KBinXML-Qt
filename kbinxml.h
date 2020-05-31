@@ -6,8 +6,7 @@
 #include <QString>
 #include <QDataStream>
 #include <QHostAddress>
-#include <QtXml>
-#include "sixbit.h"
+class QDomNode;
 
 //namespace kbin {
 
@@ -22,8 +21,9 @@ public:
     KBinXML(QByteArray data);
     KBinXML(QByteArray data, bool isBin);
     QByteArray toXML();
-    QByteArray toBin(QString targetCodec = "Shift-JIS");
+    QByteArray toBin(QString targetCodec = "SHIFT-JIS");
     bool isLoaded() const;
+    QString xmlEncoding() const;
     static bool isKBin(const QByteArray &data);
 
 private:

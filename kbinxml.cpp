@@ -55,11 +55,11 @@ private:
 
 void init( void )
 {
-    encodingFlag.insert(0x00, "cp932");
+    encodingFlag.insert(0x00, "CP932");
     encodingFlag.insert(0x20, "ASCII");
-    encodingFlag.insert(0x40, "ISO-8859-1");
+    encodingFlag.insert(0x40, "ISO 8859-1");
     encodingFlag.insert(0x60, "EUC-JP");
-    encodingFlag.insert(0x80, "Shift-JIS");
+    encodingFlag.insert(0x80, "SHIFT-JIS");
     encodingFlag.insert(0xA0, "UTF-8");
     QHashIterator<quint8, QString> i(encodingFlag);
     while (i.hasNext())
@@ -104,6 +104,7 @@ QByteArray KBinXML::toXML()
 
 QByteArray KBinXML::toBin(QString targetCodec)
 {
+    targetCodec = targetCodec.toUpper();
     Q_ASSERT(encodingFlagMap.keys().contains(targetCodec));
 
     QByteArray nodeArray;
@@ -175,6 +176,11 @@ bool KBinXML::isLoaded() const
     return loaded;
 }
 
+QString KBinXML::xmlEncoding() const
+{
+    return XMLEncoding;
+}
+
 bool KBinXML::isKBin()
 {
     return isKBin(binData);
@@ -230,7 +236,10 @@ void KBinXML::fromBin(QByteArray binaryData)
     QDataStream dataStream(data);
 
     hasNodeLeft = true;
-    xmlCodec = QTextCodec::codecForName(XMLEncoding.toUtf8());
+    if(XMLEncoding == "ASCII")
+        xmlCodec = QTextCodec::codecForName("UTF-8");
+    else
+        xmlCodec = QTextCodec::codecForName(XMLEncoding.toUtf8());
 
     QDomProcessingInstruction xmlHead = doc.createProcessingInstruction("xml", QString("version=\"1.0\" encoding=\"%1\"").arg("UTF-8"));
     doc.appendChild(xmlHead);
